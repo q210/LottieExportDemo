@@ -11,6 +11,15 @@ import Foundation
 import Photos
 import UIKit
 
+
+func prepareVideoOutputFile(_ filename: String) -> URL {
+    let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let outputURL = documentsDirectory.appendingPathComponent(filename)
+    try? FileManager.default.removeItem(at: outputURL)
+
+    return outputURL
+}
+
 func playVideo(url: URL) {
     DispatchQueue.main.async {
         let player = AVPlayer(url: url)

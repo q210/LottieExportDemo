@@ -756,6 +756,99 @@ final public class AnimationView: LottieView {
       animationLayer.forceDisplayUpdate()
     }
   }
+    
+    public func getFreeAnimationLayer(beginTime: CFTimeInterval, preferredDuration: TimeInterval) -> CALayer {
+        guard let animation = animation else {
+          return CALayer()
+        }
+        
+         let animationLayer = AnimationContainer(animation: animation,
+                                                 imageProvider: imageProvider,
+                                                 textProvider: textProvider)
+        
+         animationLayer.renderScale = self.screenScale
+         animationLayer.respectAnimationFrameRate = true
+         animationLayer.reloadImages()
+//         animationLayer.setNeedsDisplay()
+//         animationLayer.setNeedsLayout()
+         
+         let animationContext = AnimationContext(playFrom: CGFloat(animation.startFrame),
+                                                 playTo: CGFloat(animation.endFrame),
+                                                 closure: nil)
+
+         let framerate = animation.framerate
+
+         let playFrom = animationContext.playFrom.clamp(animation.startFrame, animation.endFrame)
+         let playTo = animationContext.playTo.clamp(animation.startFrame, animation.endFrame)
+         
+         let duration = ((max(playFrom, playTo) - min(playFrom, playTo)) / CGFloat(framerate))
+    
+         let layerAnimation = CABasicAnimation(keyPath: "currentFrame")
+         layerAnimation.fromValue = playFrom
+         layerAnimation.toValue = playTo
+         layerAnimation.speed = Float(animationSpeed)
+         layerAnimation.duration = TimeInterval(duration)
+         layerAnimation.fillMode = CAMediaTimingFillMode.both
+         layerAnimation.beginTime = beginTime
+         layerAnimation.repeatCount = 1
+         
+         animationID = animationID + 1
+         activeAnimationName = AnimationView.animationName + String(animationID)
+         
+         layerAnimation.delegate = animationContext.closure
+         animationContext.closure.animationLayer = animationLayer
+         animationContext.closure.animationKey = activeAnimationName
+         animationLayer.add(layerAnimation, forKey: activeAnimationName)
+
+         return animationLayer
+    }
+    
+//    public func testAnimation(beginTime: CFTimeInterval) -> CALayer {
+//        guard let animation = animation else {
+//          return CALayer()
+//        }
+//
+//        /// Remove current animation if any
+//        removeCurrentAnimation()
+//
+//
+//        let animationLayer = AnimationContainer(animation: animation, imageProvider: imageProvider, textProvider: textProvider)
+//        animationLayer.renderScale = UIScreen.main.scale
+//        animationLayer.reloadImages()
+//        animationLayer.setNeedsDisplay()
+//        setNeedsLayout()
+//
+//        let animationContext = AnimationContext(playFrom: CGFloat(animation.startFrame),
+//                                       playTo: CGFloat(animation.endFrame),
+//                                       closure: nil)
+//
+//        let framerate = animation.framerate
+//
+//        let playFrom = animationContext.playFrom.clamp(animation.startFrame, animation.endFrame)
+//        let playTo = animationContext.playTo.clamp(animation.startFrame, animation.endFrame)
+//
+//        let duration = ((max(playFrom, playTo) - min(playFrom, playTo)) / CGFloat(framerate))
+//
+//        let layerAnimation = CABasicAnimation(keyPath: "currentFrame")
+//        layerAnimation.fromValue = playFrom
+//        layerAnimation.toValue = playTo
+//        layerAnimation.duration = TimeInterval(duration)
+//        layerAnimation.fillMode = CAMediaTimingFillMode.both
+//        layerAnimation.beginTime = beginTime
+//        layerAnimation.repeatCount = 2
+//
+//        animationID = animationID + 1
+//        activeAnimationName = AnimationView.animationName + String(animationID)
+//
+//
+//        layerAnimation.delegate = animationContext.closure
+//        animationContext.closure.animationLayer = animationLayer
+//        animationContext.closure.animationKey = activeAnimationName
+//        animationLayer.add(layerAnimation, forKey: activeAnimationName)
+//        updateRasterizationState()
+//
+//        return animationLayer
+//    }
   
   // MARK: - Private (Properties)
   

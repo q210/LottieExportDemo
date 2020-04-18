@@ -25,7 +25,7 @@ class ViewController: UIViewController {
         super.viewDidLoad()
 
         view.backgroundColor = .black
-        Animation.loadedFrom(url: URL(string: "https://assets9.lottiefiles.com/packages/lf20_dH29dn.json")!,
+        Animation.loadedFrom(url: URL(string: "https://assets9.lottiefiles.com/datafiles/MUp3wlMDGtoK5FK/data.json")!,
                              closure: { animation in self.animationLoaded(newAnimation: animation) },
                              animationCache: nil)
     }
@@ -35,33 +35,33 @@ class ViewController: UIViewController {
         animationView?.frame = CGRect(x: 0, y: 0, width: 300, height: 300)
         animationView?.center = view.center
 
-        animationView?.loopMode = .loop
-        animationView?.play()
-
         view.addSubview(animationView!)
 
         animation = newAnimation
-        startExport()
-
         addButtons()
     }
 
     @objc func startExport() {
+        animationView?.loopMode = .playOnce
+        animationView?.stop()
+        animationView?.play { finished in
+            print(finished)
+            self.exportUsingExportSession()
+        }
+    }
+
+    func exportUsingExportSession() {
         guard let animation = animation else {
             print("Set up Animation first")
             return
         }
-
+        
         let bundleURL = Bundle.main.resourceURL!
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let outputURL = documentsDirectory.appendingPathComponent("processed.mov")
-        try? FileManager.default.removeItem(at: outputURL)
-
-        let duration = CMTime(seconds: animation.duration, preferredTimescale: 600)
+        let baseVideo = AVAsset(url: URL(string: "poppets.mov", relativeTo: bundleURL)!)
 
         /// Create composition
         let compositionRect = CGRect(x: 0, y: 0, width: size.width, height: size.height)
-        let timerange: CMTimeRange = CMTimeRange(start: .zero, duration: duration)
+        let timerange: CMTimeRange = CMTimeRange(start: .zero, duration: baseVideo.duration)
 
         let composition = AVMutableComposition()
         let videoComposition = AVMutableVideoComposition()
@@ -80,9 +80,7 @@ class ViewController: UIViewController {
         parentLayer.addSublayer(videoCALayer)
 
         /// Create needed assets and tracks (AVFoundation classes)
-        let avAsset = AVAsset(url: URL(string: "poppets.mov", relativeTo: bundleURL)!)
-
-        guard let videoTrack = avAsset.tracks(withMediaType: .video).first else {
+        guard let videoTrack = baseVideo.tracks(withMediaType: .video).first else {
             NSLog("Error: there is no video track in video")
             return
         }
@@ -93,55 +91,165 @@ class ViewController: UIViewController {
 
         /// Set up effects for current layer (video)
         let layerIntruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack!)
-        layerIntruction.setOpacity(0, at: .zero)
+        layerIntruction.setOpacity(1, at: .zero)
 
         /// Add effects to global instructions
         instructions.layerInstructions.append(layerIntruction)
-
+        
         /// Add Lottie
-        addLottieLayer(animation: animation, to: parentLayer, with: compositionRect)
-
+//        let animationLayer = animationView.testAnimation(beginTime: AVCoreAnimationBeginTimeAtZero)
+        let animationView = AnimationView()
+        animationView.animation = animation
+//        animationView.respectAnimationFrameRate = true
+        let animationLayer = animationView.getFreeAnimationLayer(
+            beginTime: AVCoreAnimationBeginTimeAtZero,
+            preferredDuration: CMTimeGetSeconds(baseVideo.duration)
+        )
+        
+//        let animationLayer = self.addLottieLayer(animation: animation, with: compositionRect)
+        animationLayer.frame = compositionRect
+//        animationLayer.layoutSublayers()
+        
+        parentLayer.addSublayer(animationLayer)
+        
         /// Set up composition size and framerate
         videoComposition.instructions = [instructions]
-        videoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(animation.framerate))
+//        let duration = ((Float64(animation.endFrame) - Float64(animation.startFrame) / Float64(animation.framerate))
+//        videoComposition.frameDuration = CMTimeMake(value: 12, timescale: 60)
+        videoComposition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+        videoComposition.frameDuration = CMTimeMake(value: 1, timescale: 60)
         videoComposition.renderSize = size
-        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoCALayer, in: parentLayer)
-
-        /// Run export
-        export(
+        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+            postProcessingAsVideoLayer: videoCALayer, in: parentLayer
+        )
+        
+        let outputURL = prepareVideoOutputFile("processed.mov")
+        
+        self.export(
             composition: composition,
             videoComposition: videoComposition,
+            duration: baseVideo.duration,
             outputUrl: outputURL
         ) { outputURL in
             playVideo(url: outputURL)
+            print(animationView)
         }
     }
+    
+    
+//    func addLottieLayer(animation: Animation,
+//                        with frame: CGRect) -> CALayer {
+//        let animationView = AnimationView()
+//        animationView.animation = animation
+//
+//         let animationLayer = AnimationContainer(animation: animation,
+//                                                 imageProvider: animationView.imageProvider,
+//                                                 textProvider: animationView.textProvider)
+//
+//         animationLayer.frame = frame;
+//
+//         animationLayer.renderScale = UIScreen.main.scale
+//         animationLayer.reloadImages()
+//         animationLayer.setNeedsDisplay()
+//         animationLayer.setNeedsLayout()
+//
+//         let animationContext = AnimationContext(playFrom: CGFloat(animation.startFrame),
+//                                        playTo: CGFloat(animation.endFrame),
+//                                        closure: nil)
+//
+//         let framerate = animation.framerate
+//
+//         let playFrom = animationContext.playFrom.clamp(animation.startFrame, animation.endFrame)
+//         let playTo = animationContext.playTo.clamp(animation.startFrame, animation.endFrame)
+//
+//         let duration = ((max(playFrom, playTo) - min(playFrom, playTo)) / CGFloat(framerate))
+//
+//         let layerAnimation = CABasicAnimation(keyPath: "currentFrame")
+//         layerAnimation.fromValue = playFrom
+//         layerAnimation.toValue = playTo
+//         layerAnimation.duration = TimeInterval(duration)
+//         layerAnimation.fillMode = CAMediaTimingFillMode.both
+//         layerAnimation.beginTime = AVCoreAnimationBeginTimeAtZero
+//         layerAnimation.repeatCount = 2
+//
+//         let activeAnimationName = "testAnimation" + String(1)
+//
+//
+//         layerAnimation.delegate = animationContext.closure
+//         animationContext.closure.animationLayer = animationLayer
+//         animationContext.closure.animationKey = activeAnimationName
+//         animationLayer.add(layerAnimation, forKey: activeAnimationName)
+//
+//
+//         return animationLayer
+//    }
 
-    func addLottieLayer(animation: Animation,
-                        to layer: CALayer,
-                        with frame: CGRect) {
-        let animationView = AnimationView()
-        animationView.animation = animation
-        animationView.loopMode = .loop
-        animationView.respectAnimationFrameRate = true
-        animationView.backgroundBehavior = .pauseAndRestore
+//        animationView.play(
+//            fromProgress: 0,
+//            toProgress: 1,
+//            loopMode: .repeat(2),
+//            completion: { (finished) in
+//            }
+//        )
+        
+//        let outputURLTemp = prepareVideoOutputFile("processed-temp.mov")
+//
+//        if let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) {
+//            exportSession.videoComposition = videoComposition
+//            exportSession.outputURL = outputURLTemp
+//            exportSession.timeRange = CMTimeRangeMake(start: .zero, duration: composition.duration)
+//            exportSession.outputFileType = .mov
+//
+//            let startTime = Date()
+//            exportSession.exportAsynchronously {
+//                let timeDilation = CMTimeGetSeconds(baseVideo.duration) / startTime.timeIntervalSinceNow
+//
+//                print("- \(startTime.timeIntervalSinceNow * -1) seconds elapsed for AVAssetExportSession")
+//                print("- time dilation: \(timeDilation) ")
+//                DispatchQueue.main.sync {
+//                    /// Add Lottie
+//                    let animationView = AnimationView()
+//                    animationView.animation = animation
+//                    animationView.animationSpeed = 1
+//                    animationView.respectAnimationFrameRate = true
+//                    animationView.backgroundBehavior = .pauseAndRestore
+//
+//                    let animationLayer = animationView.layer
+//                    animationLayer.frame = compositionRect
+//                    animationLayer.layoutSublayers()
+//
+//                    parentLayer.addSublayer(animationLayer)
+//
+//
+//                    self.export(
+//                        composition: composition,
+//                        videoComposition: videoComposition,
+//                        outputUrl: outputURL
+//                    ) { outputURL in
+//                        playVideo(url: outputURL)
+//                    }
+//
+//                    animationView.play(
+//                        fromProgress: 0,
+//                        toProgress: 1,
+//                        loopMode: .repeat(2),
+//                        completion: { (finished) in
+//                        }
+//                    )
+//                }
+//            }
+//        }
 
-        let animationLayer = animationView.layer
-        animationLayer.frame = frame
-        animationLayer.layoutSublayers()
-
-        layer.addSublayer(animationLayer)
-        animationView.play()
-    }
 
     func export(composition: AVMutableComposition,
                 videoComposition: AVMutableVideoComposition,
+                duration: CMTime,
                 outputUrl: URL,
                 completion: ((URL) -> Void)?) {
         if let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) {
             exportSession.videoComposition = videoComposition
             exportSession.outputURL = outputUrl
-            exportSession.timeRange = CMTimeRangeMake(start: .zero, duration: composition.duration)
+            exportSession.timeRange = CMTimeRangeMake(start: .zero, duration: duration)
             exportSession.outputFileType = .mov
 
             toggleExportButton(needEnable: false)
@@ -164,12 +272,15 @@ class ViewController: UIViewController {
     }
 
     @objc func oldExport() throws {
-        toggleOldExportButton(needEnable: false)
+        animationView?.loopMode = .playOnce
+        animationView?.stop()
+        animationView?.play { _ in
+            try? self.exportUsingAVWriter()
+        }
+    }
 
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let documentsDirectory = paths[0]
-        let outputURL = documentsDirectory.appendingPathComponent("processed.mov")
-        try? FileManager.default.removeItem(at: outputURL)
+    func exportUsingAVWriter() throws {
+        toggleOldExportButton(needEnable: false)
 
         let fps = Int64(animation?.framerate ?? 30)
         var framesMax = CGFloat(fps)
@@ -178,13 +289,11 @@ class ViewController: UIViewController {
             framesMax = CGFloat(animation.duration * Double(fps))
         }
 
-        animationView?.loopMode = .playOnce
-        animationView?.stop()
-
         /*
          * Set up VideoWriter
          */
         do {
+            let outputURL = prepareVideoOutputFile("processed.mov")
             try videoWriter = AVAssetWriter(outputURL: outputURL, fileType: AVFileType.mov)
         } catch {
             throw (error)
